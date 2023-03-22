@@ -449,5 +449,17 @@ namespace SpaLS
         }
         return C;
     }
+    vector<Expression> vec(const Matrix &mat)
+    {
+        vector<Expression> vec;
+        for (int j = 0; j < mat.n_cols(); j++)
+        {
+            for (int i = 0; i < mat.n_rows(); i++)
+            {
+                vec.push_back(mat(i, j));
+            }
+        }
+        return vec;
+    }
 }
 #endif // NODEINCLUDED
