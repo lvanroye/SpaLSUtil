@@ -7,12 +7,13 @@ int main()
     Sym y("y");
     Sym a("a");
     Sym b("b");
-    auto expr1 = (a+b);
-    auto expr = expr1*x + Const(5)*y + expr1*a*y + a*b*x;
-    cout << "expr:" << endl;
-    auto coefficients = GetCoefficients(expr, {x, y});
-    Function testf({a, b}, {Const(3)*a + Const(2)*b});
-    cout << testf.Eval({1, 2}).at(0) << endl;
+    auto expr = Const(5)*y + a*y + a*b*x;
+    auto coeffs = GetCoefficients(expr, {x, y});
+    Function coeffs_f({a,b}, coeffs);
+    auto res = coeffs_f.Eval({3,4});
+    // print res
+    for(auto& r : res)
+        std::cout << r << std::endl;
     return 0;
 };
 
