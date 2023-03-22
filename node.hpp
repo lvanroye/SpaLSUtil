@@ -6,6 +6,7 @@
 #include <iostream>
 #include <vector>
 #include <type_traits>
+#include <algorithm>
 using namespace std;
 namespace SpaLS
 {
@@ -15,6 +16,7 @@ namespace SpaLS
         // Node();
         // ~Node();
         virtual ostream &print(ostream &os) { return os << "Node"; };
+        virtual bool equals(const Node &node) const { return this == &node; };
     };
     class SymNode : public Node
     {
@@ -35,6 +37,19 @@ namespace SpaLS
     public:
         ZeroNode(){};
         virtual ostream &print(ostream &os) { return os << "00"; };
+        virtual bool equals(const Node &node) const
+        {
+            // check if node is of ZeroNode type
+            auto zero_node = dynamic_cast<const ZeroNode *>(&node);
+            if (zero_node)
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        };
     };
 
     class Expression : public shared_ptr<Node>
@@ -47,6 +62,7 @@ namespace SpaLS
             return Expression(make_shared<Derived>(node));
         }
         friend ostream &operator<<(ostream &os, const Expression &expr) { return expr->print(os); };
+        bool operator==(const Expression &expr) const { return this->get()->equals(*expr.get()); };
     };
 
     class TwoNode : public Node
@@ -88,6 +104,15 @@ namespace SpaLS
 
     Expression operator+(const Expression &expr1, const Expression &expr2)
     {
+        // simplificiations
+        if (expr1 == Zero())
+        {
+            return expr2;
+        }
+        if (expr2 == Zero())
+        {
+            return expr1;
+        }
         return Expression::make_new(PlusNode(expr1, expr2));
     }
 
@@ -143,17 +168,157 @@ namespace SpaLS
                         coefficients.at(i) = coefficients.at(i) + expr1;
                     }
                 }
+                else if (term == sym)
+                {
+                    coefficients.at(i) = coefficients.at(i) + Const(1.0);
+                }
                 else
                 {
-                    if (term == sym)
-                    {
-                        coefficients.at(i) = coefficients.at(i) + Const(1.0);
-                    }
+                    // runtime error
+                    runtime_error("Error in GetCoefficients");
                 }
             }
         }
 
         return coefficients;
+    };
+
+    void OrderDepthFirstRecurse(const Expression expr, vector<Expression> &result)
+    {
+        // check if expr is already in result
+        if (find(result.begin(), result.end(), expr) != result.end())
+        {
+            return;
+        }
+        // check if expression is a TwoNode
+        auto two_node = dynamic_pointer_cast<TwoNode>(expr);
+        if (two_node)
+        {
+            auto expr1 = two_node->expr1;
+            auto expr2 = two_node->expr2;
+            OrderDepthFirstRecurse(expr1, result);
+            OrderDepthFirstRecurse(expr2, result);
+        }
+        result.push_back(expr);
+    };
+    class Function
+    {
+        enum Instruction
+        {
+            INPUT,
+            OUTPUT,
+            PLUS,
+            MULT,
+            CONST
+        };
+        struct AlgEl
+        {
+            Instruction ins;
+            int arg1;
+            int arg2;
+            double val;
+        };
+        Function(vector<Expression> input, Expression output)
+        {
+            vector<Expression> ordered_expression;
+            OrderDepthFirstRecurse(output, ordered_expression);
+            algorithm.reserve(ordered_expression.size());
+            work.reserve(ordered_expression.size());
+            for (auto expr : ordered_expression)
+            {
+                // check if expr is a Sym
+                auto sym_node = dynamic_pointer_cast<SymNode>(expr);
+                if (sym_node)
+                {
+                    // find the index of expr in input
+                    auto it = find(input.begin(), input.end(), expr);
+                    // check if expr is in input
+                    if (it >= input.end())
+                    {
+                        // runtime error
+                        runtime_error("Error in Function constructor");
+                    }
+                    // convert it find output to index
+                    int index = it - input.begin();
+                    AlgEl el({INPUT, index, 0, 0.0});
+                }
+                // check if expr is a Const
+                auto const_node = dynamic_pointer_cast<ConstNode>(expr);
+                if (const_node)
+                {
+                    AlgEl el({CONST, 0, 0, const_node->value});
+                }
+                // check if expr is a Zero
+                auto zero_node = dynamic_pointer_cast<ZeroNode>(expr);
+                if (zero_node)
+                {
+                    AlgEl el({CONST, 0, 0, 0.0});
+                }
+                // check if expr is a PlusNode
+                auto plus_node = dynamic_pointer_cast<PlusNode>(expr);
+                // check if expr is a MultNode
+                auto mult_node = dynamic_pointer_cast<MultNode>(expr);
+                if (mult_node || plus_node)
+                {
+                    // find the index of expr1 in ordered_expression
+                    auto it = find(ordered_expression.begin(), ordered_expression.end(), mult_node->expr1);
+
+                    // check if expr1 is in ordered_expression
+                    if (it >= ordered_expression.end())
+                    {
+                        // runtime error
+                        runtime_error("Error in Function constructor");
+                    }
+                    // convert it find output to index
+                    int index1 = it - ordered_expression.begin();
+                    // find the index of expr2 in ordered_expression
+                    it = find(ordered_expression.begin(), ordered_expression.end(), mult_node->expr2);
+                    // check if expr2 is in ordered_expression
+                    if (it >= ordered_expression.end())
+                    {
+                        // runtime error
+                        runtime_error("Error in Function constructor");
+                    }
+                    // convert it find output to index
+                    int index2 = it - ordered_expression.begin();
+                    AlgEl el({mult_node?MULT:PLUS, index1, index2, 0.0});
+                }
+            }
+            // add the output instruction
+            AlgEl el({OUTPUT, 0, 0, 0.0});
+        }
+        // call the function
+        double Eval(const vector<double>& input)
+        {
+            work.resize(0);
+            for (auto el : algorithm)
+            {
+                switch (el.ins)
+                {
+                case INPUT:
+                    work.push_back(input.at(el.arg1));
+                    break;
+                case OUTPUT:
+                    return work.back();
+                    break;
+                case PLUS:
+                    work.push_back(work.at(el.arg1) + work.at(el.arg2));
+                    break;
+                case MULT:
+                    work.push_back(work.at(el.arg1) * work.at(el.arg2));
+                    break;
+                case CONST:
+                    work.push_back(el.val);
+                    break;
+                default:
+                    // runtime error
+                    runtime_error("Error in Function Eval");
+                    break;
+                }
+            }
+        }
+        vector<AlgEl> algorithm;
+        vector<double> work;
     };
 
     // matrix stuff
