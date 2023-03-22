@@ -113,6 +113,12 @@ namespace SpaLS
         {
             return expr1;
         }
+        auto expr1_const = dynamic_pointer_cast<ConstNode>(expr1);
+        auto expr2_const = dynamic_pointer_cast<ConstNode>(expr2);
+        if (expr1_const && expr2_const)
+        {
+            return Const(expr1_const->value + expr2_const->value);
+        }
         return Expression::make_new(PlusNode(expr1, expr2));
     }
 
@@ -122,6 +128,12 @@ namespace SpaLS
         if (expr1 == Zero() || expr2 == Zero())
         {
             return Zero();
+        }
+        auto expr1_const = dynamic_pointer_cast<ConstNode>(expr1);
+        auto expr2_const = dynamic_pointer_cast<ConstNode>(expr2);
+        if (expr1_const && expr2_const)
+        {
+            return Const(expr1_const->value * expr2_const->value);
         }
         return Expression::make_new(MultNode(expr1, expr2));
     }
