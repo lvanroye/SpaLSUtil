@@ -118,6 +118,11 @@ namespace SpaLS
 
     Expression operator*(const Expression &expr1, const Expression &expr2)
     {
+        // simplificiations
+        if (expr1 == Zero() || expr2 == Zero())
+        {
+            return Zero();
+        }
         return Expression::make_new(MultNode(expr1, expr2));
     }
 
@@ -141,46 +146,50 @@ namespace SpaLS
         return terms;
     };
 
-    vector<Expression> GetCoefficients(const Expression &expr, const vector<Sym> &sym_vec)
+    vector<vector<Expression>> GetCoefficients(const vector<Expression> &expr_vec, const vector<Expression> &sym_vec)
     {
-        vector<Expression> coefficients(sym_vec.size(), Zero());
-        // get the terms of the expression
-        vector<Expression> terms = GetTerms(expr);
-        // iterate over all symbols
-        for (int i = 0; i < sym_vec.size(); i++)
+        vector<vector<Expression>> ret;
+        for (auto expr : expr_vec)
         {
-            auto sym = sym_vec.at(i);
-            // iterate over all terms
-            for (auto term : terms)
+            vector<Expression> coefficients(sym_vec.size(), Zero());
+            // get the terms of the expression
+            vector<Expression> terms = GetTerms(expr);
+            // iterate over all symbols
+            for (int i = 0; i < sym_vec.size(); i++)
             {
-                // check if the term contains the symbol
-                auto mult_node = dynamic_pointer_cast<MultNode>(term);
-                if (mult_node)
+                auto sym = sym_vec.at(i);
+                // iterate over all terms
+                for (auto term : terms)
                 {
-                    auto expr1 = mult_node->expr1;
-                    auto expr2 = mult_node->expr2;
-                    if (expr1 == sym)
+                    // check if the term contains the symbol
+                    auto mult_node = dynamic_pointer_cast<MultNode>(term);
+                    if (mult_node)
                     {
-                        coefficients.at(i) = coefficients.at(i) + expr2;
+                        auto expr1 = mult_node->expr1;
+                        auto expr2 = mult_node->expr2;
+                        if (expr1 == sym)
+                        {
+                            coefficients.at(i) = coefficients.at(i) + expr2;
+                        }
+                        else if (expr2 == sym)
+                        {
+                            coefficients.at(i) = coefficients.at(i) + expr1;
+                        }
                     }
-                    else if (expr2 == sym)
+                    else if (term == sym)
                     {
-                        coefficients.at(i) = coefficients.at(i) + expr1;
+                        coefficients.at(i) = coefficients.at(i) + Const(1.0);
                     }
-                }
-                else if (term == sym)
-                {
-                    coefficients.at(i) = coefficients.at(i) + Const(1.0);
-                }
-                else
-                {
-                    // runtime error
-                    runtime_error("Error in GetCoefficients");
+                    else
+                    {
+                        // runtime error
+                        runtime_error("Error in GetCoefficients");
+                    }
                 }
             }
+            ret.push_back(coefficients);
         }
-
-        return coefficients;
+        return ret;
     };
 
     void OrderDepthFirstRecurse(const Expression expr, vector<Expression> &result)
