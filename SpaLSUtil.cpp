@@ -11,7 +11,7 @@ int main()
     auto expr = expr1*x + Const(5)*y + expr1*a*y + a*b*x;
     cout << "expr:" << endl;
     auto coefficients = GetCoefficients(expr, {x, y});
-    Function testf({a, b}, coefficients.at(0));
+    Function testf({a, b}, Const(3)*a + Const(2)*b);
     cout << testf.Eval({1, 2}) << endl;
     return 0;
 };

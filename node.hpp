@@ -203,6 +203,7 @@ namespace SpaLS
     };
     class Function
     {
+        // the set of possible instructions is very limited
         enum Instruction
         {
             INPUT,
