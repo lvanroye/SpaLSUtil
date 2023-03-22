@@ -15,22 +15,6 @@ namespace SpaLS
         // Node();
         // ~Node();
         virtual ostream &print(ostream &os) { return os << "Node"; };
-        virtual bool is_sym() { return false; };
-        virtual bool is_const() { return false; };
-        virtual bool is_zero() { return false; };
-        virtual bool is_plus() { return false; };
-        virtual bool is_mult() { return false; };
-    };
-    class Expression : public shared_ptr<Node>
-    {
-    public:
-        Expression(const shared_ptr<Node> &ptr) : shared_ptr<Node>(ptr){};
-        template <typename Derived>
-        static Expression make_new(const Derived &node)
-        {
-            return Expression(make_shared<Derived>(node));
-        }
-        friend ostream &operator<<(ostream &os, const Expression &expr) { return expr->print(os); };
     };
     class SymNode : public Node
     {
@@ -51,8 +35,41 @@ namespace SpaLS
     public:
         ZeroNode(){};
         virtual ostream &print(ostream &os) { return os << "00"; };
-        bool is_zero() override { return true; };
     };
+
+    class Expression : public shared_ptr<Node>
+    {
+    public:
+        Expression(const shared_ptr<Node> &ptr) : shared_ptr<Node>(ptr){};
+        template <typename Derived>
+        static Expression make_new(const Derived &node)
+        {
+            return Expression(make_shared<Derived>(node));
+        }
+        friend ostream &operator<<(ostream &os, const Expression &expr) { return expr->print(os); };
+    };
+
+    class TwoNode : public Node
+    {
+    public:
+        TwoNode(const Expression &expr1, const Expression &expr2) : expr1(expr1), expr2(expr2){};
+        const Expression expr1;
+        const Expression expr2;
+    };
+
+    class PlusNode : public TwoNode
+    {
+    public:
+        PlusNode(const Expression &expr1, const Expression &expr2) : TwoNode(expr1, expr2){};
+        virtual ostream &print(ostream &os) override { return os << "(" << expr1 << "+" << expr2 << ")"; };
+    };
+    class MultNode : public TwoNode
+    {
+    public:
+        MultNode(const Expression &expr1, const Expression &expr2) : TwoNode(expr1, expr2){};
+        virtual ostream &print(ostream &os) override { return os << "(" << expr1 << "*" << expr2 << ")"; };
+    };
+
     class Sym : public Expression
     {
     public:
@@ -68,52 +85,76 @@ namespace SpaLS
     public:
         Zero() : Expression(Expression::make_new(ZeroNode())){};
     };
-    class PlusNode : public Node
-    {
-    public:
-        PlusNode(const Expression &expr1, const Expression &expr2) : expr1(expr1), expr2(expr2){};
-        const Expression expr1;
-        const Expression expr2;
-        virtual ostream &print(ostream &os) override { return os << "(" << expr1 << "+" << expr2 << ")"; };
-        bool is_plus() override { return true; };
-    };
-    class MultNode : public Node
-    {
-    public:
-        MultNode(const Expression &expr1, const Expression &expr2) : expr1(expr1), expr2(expr2){};
-        const Expression expr1;
-        const Expression expr2;
-        virtual ostream &print(ostream &os) override { return os << "(" << expr1 << "*" << expr2 << ")"; };
-        bool is_mult() override { return true; };
-    };
 
     Expression operator+(const Expression &expr1, const Expression &expr2)
     {
         return Expression::make_new(PlusNode(expr1, expr2));
     }
-    
+
     Expression operator*(const Expression &expr1, const Expression &expr2)
     {
         return Expression::make_new(MultNode(expr1, expr2));
     }
 
-    Expression GetCoeff(const Expression& expr, const Sym& sym)
+    vector<Expression> GetTerms(const Expression &expr)
     {
-        if(expr -> is_plus())
+        vector<Expression> terms;
+        auto plus_node = dynamic_pointer_cast<PlusNode>(expr);
+        if (plus_node)
         {
-            cout << "is plus" << endl;
+            auto expr1 = plus_node->expr1;
+            auto expr2 = plus_node->expr2;
+            auto terms1 = GetTerms(expr1);
+            auto terms2 = GetTerms(expr2);
+            terms.insert(terms.end(), terms1.begin(), terms1.end());
+            terms.insert(terms.end(), terms2.begin(), terms2.end());
         }
-        return Zero();
-    }
-    
-    // vector<Expression> GetCoefficients(const Expression& exprs, const vector<Sym>& vars)
-    // {
-    //     // Expression 
-    //     // return coeffs;
-    // };
+        else
+        {
+            terms.push_back(expr);
+        }
+        return terms;
+    };
 
+    vector<Expression> GetCoefficients(const Expression &expr, const vector<Sym> &sym_vec)
+    {
+        vector<Expression> coefficients(sym_vec.size(), Zero());
+        // get the terms of the expression
+        vector<Expression> terms = GetTerms(expr);
+        // iterate over all symbols
+        for (int i = 0; i < sym_vec.size(); i++)
+        {
+            auto sym = sym_vec.at(i);
+            // iterate over all terms
+            for (auto term : terms)
+            {
+                // check if the term contains the symbol
+                auto mult_node = dynamic_pointer_cast<MultNode>(term);
+                if (mult_node)
+                {
+                    auto expr1 = mult_node->expr1;
+                    auto expr2 = mult_node->expr2;
+                    if (expr1 == sym)
+                    {
+                        coefficients.at(i) = coefficients.at(i) + expr2;
+                    }
+                    else if (expr2 == sym)
+                    {
+                        coefficients.at(i) = coefficients.at(i) + expr1;
+                    }
+                }
+                else
+                {
+                    if (term == sym)
+                    {
+                        coefficients.at(i) = coefficients.at(i) + Const(1.0);
+                    }
+                }
+            }
+        }
 
-
+        return coefficients;
+    };
 
     // matrix stuff
     class Matrix
@@ -195,7 +236,7 @@ namespace SpaLS
             {
                 for (int j = 0; j < n_cols; j++)
                 {
-                    (*this)(i, j) = Sym(name + string("(") + to_string(i) + string(",") + to_string(j)+ string(")") );
+                    (*this)(i, j) = Sym(name + string("(") + to_string(i) + string(",") + to_string(j) + string(")"));
                 }
             }
         };
