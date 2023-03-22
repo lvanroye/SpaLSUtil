@@ -221,10 +221,11 @@ namespace SpaLS
         };
 
     public:
-        Function(const vector<Expression> &input, const Expression &output)
+        Function(const vector<Expression> &input, const vector<Expression> &output)
         {
             vector<Expression> ordered_expression;
-            OrderDepthFirstRecurse(output, ordered_expression);
+            for (auto expr : output)
+                OrderDepthFirstRecurse(expr, ordered_expression);
             algorithm.reserve(ordered_expression.size());
             work.reserve(ordered_expression.size());
             for (auto expr : ordered_expression)
@@ -293,12 +294,23 @@ namespace SpaLS
                 }
             }
             // add the output instruction
-            AlgEl el({OUTPUT, 0, 0, 0.0});
-            algorithm.push_back(el);
+            for (auto expr : output)
+            {
+                // find the index of expr in ordered_expression
+                auto it = find(ordered_expression.begin(), ordered_expression.end(), expr);
+                int index = it - ordered_expression.begin();
+                // find the index of expr in output
+                auto it2 = find(output.begin(), output.end(), expr);
+                int index2 = it2 - output.begin();
+                AlgEl el({OUTPUT, index, index2, 0.0});
+                algorithm.push_back(el);
+            }
+            output_size = output.size();
         }
         // call the function
-        double Eval(const vector<double> &input)
+        vector<double> Eval(const vector<double> &input)
         {
+            vector<double> result(output_size);
             work.resize(0);
             for (auto el : algorithm)
             {
@@ -308,8 +320,8 @@ namespace SpaLS
                     work.push_back(input.at(el.arg1));
                     break;
                 case OUTPUT:
-                    return work.back();
-                    break;
+                    work.push_back(0.0);
+                    result.at(el.arg2) = work.at(el.arg1);
                 case PLUS:
                     work.push_back(work.at(el.arg1) + work.at(el.arg2));
                     break;
@@ -325,10 +337,11 @@ namespace SpaLS
                     break;
                 }
             }
-            return 0;
+            return result;
         }
         vector<AlgEl> algorithm;
         vector<double> work;
+        int output_size;
     };
 
     // matrix stuff

@@ -15,10 +15,16 @@ namespace SpaLS
         }
         // parameter(m, n)
         // set_value(variable, value)
-        // add_equation(lhs, rhs)
+        void add_equation(const Expression& lhs, const Expression&  rhs)
+        {
+            equations.push_back(lhs);
+            rhss.push_back(rhs);
+        }
         // get_coefficients()
         // eval_triplets()
         vector<Sym> variables;
+        vector<Expression> equations;
+        vector<Expression> rhss;
     };
 }
 
