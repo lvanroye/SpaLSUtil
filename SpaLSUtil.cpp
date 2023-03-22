@@ -26,6 +26,8 @@ int main()
     {
         cout << expr << endl;
     }
+    Function testf({a, b}, coefficients.at(0));
+    cout << testf.Eval({1, 2}) << endl;
     return 0;
 };
 

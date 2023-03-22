@@ -218,7 +218,9 @@ namespace SpaLS
             int arg2;
             double val;
         };
-        Function(vector<Expression> input, Expression output)
+
+    public:
+        Function(const vector<Expression> &input, const Expression &output)
         {
             vector<Expression> ordered_expression;
             OrderDepthFirstRecurse(output, ordered_expression);
@@ -241,27 +243,28 @@ namespace SpaLS
                     // convert it find output to index
                     int index = it - input.begin();
                     AlgEl el({INPUT, index, 0, 0.0});
+                    algorithm.push_back(el);
                 }
                 // check if expr is a Const
                 auto const_node = dynamic_pointer_cast<ConstNode>(expr);
                 if (const_node)
                 {
                     AlgEl el({CONST, 0, 0, const_node->value});
+                    algorithm.push_back(el);
                 }
                 // check if expr is a Zero
                 auto zero_node = dynamic_pointer_cast<ZeroNode>(expr);
                 if (zero_node)
                 {
                     AlgEl el({CONST, 0, 0, 0.0});
+                    algorithm.push_back(el);
                 }
-                // check if expr is a PlusNode
-                auto plus_node = dynamic_pointer_cast<PlusNode>(expr);
-                // check if expr is a MultNode
-                auto mult_node = dynamic_pointer_cast<MultNode>(expr);
-                if (mult_node || plus_node)
+                // check if expr is a BinaryNode
+                auto binary_node = dynamic_pointer_cast<TwoNode>(expr);
+                if (binary_node)
                 {
                     // find the index of expr1 in ordered_expression
-                    auto it = find(ordered_expression.begin(), ordered_expression.end(), mult_node->expr1);
+                    auto it = find(ordered_expression.begin(), ordered_expression.end(), binary_node->expr1);
 
                     // check if expr1 is in ordered_expression
                     if (it >= ordered_expression.end())
@@ -272,7 +275,7 @@ namespace SpaLS
                     // convert it find output to index
                     int index1 = it - ordered_expression.begin();
                     // find the index of expr2 in ordered_expression
-                    it = find(ordered_expression.begin(), ordered_expression.end(), mult_node->expr2);
+                    it = find(ordered_expression.begin(), ordered_expression.end(), binary_node->expr2);
                     // check if expr2 is in ordered_expression
                     if (it >= ordered_expression.end())
                     {
@@ -281,14 +284,19 @@ namespace SpaLS
                     }
                     // convert it find output to index
                     int index2 = it - ordered_expression.begin();
-                    AlgEl el({mult_node?MULT:PLUS, index1, index2, 0.0});
+                    auto plus_node = dynamic_pointer_cast<PlusNode>(expr);
+                    // check if expr is a MultNode
+                    auto mult_node = dynamic_pointer_cast<MultNode>(expr);
+                    AlgEl el({mult_node ? MULT : PLUS, index1, index2, 0.0});
+                    algorithm.push_back(el);
                 }
             }
             // add the output instruction
             AlgEl el({OUTPUT, 0, 0, 0.0});
+            algorithm.push_back(el);
         }
         // call the function
-        double Eval(const vector<double>& input)
+        double Eval(const vector<double> &input)
         {
             work.resize(0);
             for (auto el : algorithm)
@@ -316,6 +324,7 @@ namespace SpaLS
                     break;
                 }
             }
+            return 0;
         }
         vector<AlgEl> algorithm;
         vector<double> work;
