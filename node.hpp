@@ -415,6 +415,7 @@ namespace SpaLS
             }
         };
     };
+
     class SymMatrix : public Matrix
     {
     public:
