@@ -223,6 +223,7 @@ namespace SpaLS
     public:
         Function(const vector<Expression> &input, const vector<Expression> &output)
         {
+            // TODO: at this point no re-use of workspace is done, the lifetime of workspace variables is not taken into account
             vector<Expression> ordered_expression;
             for (auto expr : output)
                 OrderDepthFirstRecurse(expr, ordered_expression);
