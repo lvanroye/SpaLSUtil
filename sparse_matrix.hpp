@@ -9,20 +9,21 @@ namespace SpaLS
         SymMatrix variable(int size)
         {
             SymMatrix sym("x", size, 1);
-            auto symvec = vec(sym);
-            variables.insert(variables.end(), symvec.begin(), symvec.end());
+            variables.push_back(sym);
             return sym;
         }
-        // parameter(m, n)
+        void parameter(int m, int n)
+        {
+            SymMatrix sym("p", m, n);
+            variables.push_back(sym);
+        }
         // set_value(variable, value)
         void add_equation(const Expression &lhs, const Expression &rhs)
         {
             equations.push_back(lhs);
             rhss.push_back(rhs);
         }
-        // get_coefficients()
-        // eval_triplets()
-        vector<Expression> variables;
+        vector<Matrix> variables;
         vector<Expression> equations;
         vector<Expression> rhss;
     };

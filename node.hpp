@@ -141,7 +141,14 @@ namespace SpaLS
     vector<Expression> GetTerms(const Expression &expr)
     {
         vector<Expression> terms;
+        // check if plus node
         auto plus_node = dynamic_pointer_cast<PlusNode>(expr);
+        // check if mult node
+        auto mult_node = dynamic_pointer_cast<MultNode>(expr);
+        auto expr1_plus_node = mult_node ? dynamic_pointer_cast<PlusNode>(mult_node->expr1) : nullptr;
+        auto expr2_plus_node = mult_node ? dynamic_pointer_cast<PlusNode>(mult_node->expr2) : nullptr;
+        auto sym_node = dynamic_pointer_cast<SymNode>(expr);
+        auto const_node = dynamic_pointer_cast<ConstNode>(expr);
         if (plus_node)
         {
             auto expr1 = plus_node->expr1;
@@ -150,6 +157,18 @@ namespace SpaLS
             auto terms2 = GetTerms(expr2);
             terms.insert(terms.end(), terms1.begin(), terms1.end());
             terms.insert(terms.end(), terms2.begin(), terms2.end());
+        }
+        else if (mult_node && expr1_plus_node)
+        {
+            // (a+b)*c = ac + bc
+            auto termss = GetTerms(expr1_plus_node->expr1 * mult_node->expr2 + expr1_plus_node->expr2 * mult_node->expr2);
+            terms.insert(terms.end(), termss.begin(), termss.end());
+        }
+        else if (mult_node && expr2_plus_node)
+        {
+            // a*(b+c) = ab + ac
+            auto termss = GetTerms(expr2_plus_node->expr1 * mult_node->expr1 + expr2_plus_node->expr2 * mult_node->expr1);
+            terms.insert(terms.end(), termss.begin(), termss.end());
         }
         else
         {
