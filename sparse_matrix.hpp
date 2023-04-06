@@ -9,13 +9,6 @@ namespace SpaLS
         int aj = 0;
     };
 
-    struct ValueMatrixAbstract
-    {
-        virtual int n_rows() const = 0;
-        virtual int n_cols() const = 0;
-        virtual double eval(const int ai, const int aj) const = 0;
-    };
-
     class SparseMatrix
     {
     public:
@@ -33,7 +26,7 @@ namespace SpaLS
             dirty = true;
         }
         // set_value(variable, value)
-        void add_equation(const Matrix &lhs, const Matrix &rhs)
+        void add_equation(const Matrix<Expression> &lhs, const Matrix<Expression> &rhs)
         {
             equations.push_back(lhs);
             rhss.push_back(rhs);
@@ -57,11 +50,11 @@ namespace SpaLS
         // vector<double> EvalCoeffs()
         // {
         // }
-        vector<Matrix> variables;
-        vector<Matrix> parameters;
-        vector<ValueMatrixAbstract> parameters_vals;
-        vector<Matrix> equations;
-        vector<Matrix> rhss;
+        vector<Matrix<Expression>> variables;
+        vector<Matrix<Expression>> parameters;
+        vector<Matrix<double>> parameters_vals;
+        vector<Matrix<Expression>> equations;
+        vector<Matrix<Expression>> rhss;
         vector<Index> sparsity;
         vector<Expression> coeffs;
         Function coeffs_f; // computes coefficients from parameters
@@ -83,7 +76,7 @@ namespace SpaLS
                 for (int var_i = 0; var_i < n_var; var_i++)
                 {
                     // check if coefficient is zero
-                    if (all_coeffs.at(eq_i).at(var_i) == Zero())
+                    if (all_coeffs.at(eq_i).at(var_i) == Const(0.0))
                     {
                         continue;
                     }

@@ -9,7 +9,7 @@ int main()
     Sym x("x");
     Sym y("y");
 
-    auto expr = (a + b) * (x + y) + Const(5) * x;
+    auto expr = (a + b + 1) * (x + y) + 5 * x;
     auto terms = GetTerms(expr);
     for (auto term : terms)
         cout << term << endl;

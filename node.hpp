@@ -10,7 +10,7 @@
 using namespace std;
 namespace SpaLS
 {
-    class Expression;
+    class Expression; // forward declaration
 
     class Node
     {
@@ -38,6 +38,7 @@ namespace SpaLS
     class Expression : public shared_ptr<Node>
     {
     public:
+        Expression(const double val); // forward declaration, implemented after ConstNode is defined;
         Expression(const shared_ptr<Node> &ptr) : shared_ptr<Node>(ptr){};
         template <typename Derived>
         static Expression make_new(const Derived &node)
@@ -79,6 +80,9 @@ namespace SpaLS
                 return value() == node.value();
         };
     };
+    Expression::Expression(const double val) : shared_ptr<Node>(make_new<ConstNode>(val)){
+
+                                               };
 
     class ZeroNode : public LeafNode
     {
@@ -225,7 +229,7 @@ namespace SpaLS
         vector<vector<Expression>> ret;
         for (auto expr : expr_vec)
         {
-            vector<Expression> coefficients(sym_vec.size(), Const(0.0));
+            vector<Expression> coefficients(sym_vec.size(), 0.0);
             // get the terms of the expression
             vector<Expression> terms = GetTerms(expr);
             // iterate over all symbols
@@ -439,15 +443,16 @@ namespace SpaLS
     };
 
     // matrix stuff
+    template <typename T>
     class Matrix
     {
     public:
         Matrix(const int n_rows, const int n_cols) : n_rows_(n_rows), n_cols_(n_cols)
         {
-            data.resize(n_rows * n_cols, Const(0.0));
+            data.resize(n_rows * n_cols, T(0.0));
         };
-        Expression &operator()(int i, int j) { return data[i + n_rows_ * j]; };
-        const Expression &operator()(int i, int j) const { return data[i + n_rows_ * j]; };
+        T &operator()(int i, int j) { return data[i + n_rows_ * j]; };
+        const T &operator()(int i, int j) const { return data[i + n_rows_ * j]; };
         int n_rows() const
         {
             return n_rows_;
@@ -458,11 +463,13 @@ namespace SpaLS
         };
 
     protected:
-        vector<Expression> data;
+        vector<T> data;
         const int n_rows_;
         const int n_cols_;
     };
-    ostream &operator<<(ostream &os, const Matrix &A)
+
+    template <typename T>
+    ostream &operator<<(ostream &os, const Matrix<T> &A)
     {
         for (int i = 0; i < A.n_rows(); i++)
         {
@@ -474,7 +481,7 @@ namespace SpaLS
         }
         return os;
     }
-    class Zerom : public Matrix
+    class Zerom : public Matrix<Expression>
     {
     public:
         Zerom(int n_rows, int n_cols) : Matrix(n_rows, n_cols)
@@ -488,10 +495,11 @@ namespace SpaLS
             }
         };
     };
-    class Eye : public Matrix
+    template <typename T>
+    class Eye : public Matrix<T>
     {
     public:
-        Eye(int n_rows) : Matrix(n_rows, n_rows)
+        Eye(int n_rows) : Matrix<T>(n_rows, n_rows)
         {
             for (int i = 0; i < n_rows; i++)
             {
@@ -510,7 +518,7 @@ namespace SpaLS
         };
     };
 
-    class SymMatrix : public Matrix
+    class SymMatrix : public Matrix<Expression>
     {
     public:
         SymMatrix(const string &name, const int n_rows, const int n_cols) : Matrix(n_rows, n_cols)
@@ -525,7 +533,8 @@ namespace SpaLS
         };
     };
 
-    Matrix operator*(const Matrix &A, const Matrix &B)
+    template <typename T>
+    Matrix<T> operator*(const Matrix<T> &A, const Matrix<T> &B)
     {
         int n_rows = A.n_rows();
         int n_cols = B.n_cols();
@@ -543,7 +552,8 @@ namespace SpaLS
         }
         return C;
     }
-    Matrix operator+(const Matrix &A, const Matrix &B)
+    template <typename T>
+    Matrix<T> operator+(const Matrix<T> &A, const Matrix<T> &B)
     {
         int n_rows = A.n_rows();
         int n_cols = A.n_cols();
@@ -557,9 +567,11 @@ namespace SpaLS
         }
         return C;
     }
-    vector<Expression> vec(const Matrix &mat)
+
+    template <typename T>
+    vector<T> vec(const Matrix<T> &mat)
     {
-        vector<Expression> vec;
+        vector<T> vec;
         for (int j = 0; j < mat.n_cols(); j++)
         {
             for (int i = 0; i < mat.n_rows(); i++)
@@ -569,9 +581,11 @@ namespace SpaLS
         }
         return vec;
     }
-    vector<Expression> vec(const vector<Matrix> &mats)
+
+    template <typename T>
+    vector<T> vec(const vector<Matrix<T>> &mats)
     {
-        vector<Expression> ret;
+        vector<T> ret;
         for (auto mat : mats)
         {
             auto vecc = vec(mat);
