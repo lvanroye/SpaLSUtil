@@ -10,45 +10,28 @@
 using namespace std;
 namespace SpaLS
 {
+    class Expression;
+
     class Node
     {
     public:
-        // Node();
-        // ~Node();
         virtual ostream &print(ostream &os) { return os << "Node"; };
         virtual bool equals(const Node &node) const { return this == &node; };
-    };
-    class SymNode : public Node
-    {
-    public:
-        SymNode(const string &name) : name(name){};
-        const string name;
-        virtual ostream &print(ostream &os) { return os << name; };
-    };
-    class ConstNode : public Node
-    {
-    public:
-        ConstNode(const double value) : value(value){};
-        const double value;
-        virtual ostream &print(ostream &os) { return os << value; };
-    };
-    class ZeroNode : public Node
-    {
-    public:
-        ZeroNode(){};
-        virtual ostream &print(ostream &os) { return os << "00"; };
-        virtual bool equals(const Node &node) const
+        virtual bool is_sym() const { return false; };
+        virtual bool is_const() const { return false; };
+        virtual bool is_zero() const { return false; };
+        virtual bool is_plus() const { return false; };
+        virtual bool is_mult() const { return false; };
+        virtual bool is_unary() const { return false; };
+        virtual bool is_binary() const { return false; };
+        virtual bool is_leaf() const { return false; };
+        virtual const Expression &dep(const int i) const
         {
-            // check if node is of ZeroNode type
-            auto zero_node = dynamic_cast<const ZeroNode *>(&node);
-            if (zero_node)
-            {
-                return true;
-            }
-            else
-            {
-                return false;
-            }
+            throw runtime_error("Node::dep() not available");
+        };
+        virtual double value() const
+        {
+            throw runtime_error("Node::value() not available");
         };
     };
 
@@ -65,25 +48,83 @@ namespace SpaLS
         bool operator==(const Expression &expr) const { return this->get()->equals(*expr.get()); };
     };
 
-    class TwoNode : public Node
+    class LeafNode : public Node
+    {
+        bool is_leaf() const override { return true; };
+    };
+
+    class SymNode : public LeafNode
     {
     public:
-        TwoNode(const Expression &expr1, const Expression &expr2) : expr1(expr1), expr2(expr2){};
+        SymNode(const string &name) : name(name){};
+        const string name;
+        bool is_sym() const override { return true; };
+        virtual ostream &print(ostream &os) { return os << name; };
+    };
+
+    class ConstNode : public LeafNode
+    {
+    public:
+        ConstNode(const double value) : value_(value){};
+        const double value_;
+        bool is_const() const override { return true; };
+        bool is_zero() const override { return value_ == 0; };
+        double value() const override { return value_; };
+        virtual ostream &print(ostream &os) { return os << value_; };
+        virtual bool equals(const Node &node) const
+        {
+            if (!node.is_const())
+                return false;
+            else
+                return value() == node.value();
+        };
+    };
+
+    class ZeroNode : public LeafNode
+    {
+    public:
+        ZeroNode(){};
+        virtual ostream &print(ostream &os) { return os << "00"; };
+        virtual bool equals(const Node &node) const
+        {
+            return node.is_zero();
+        };
+        bool is_zero() const override { return true; };
+        bool is_const() const override { return true; };
+        double value() const override { return 0; };
+    };
+
+    class UnaryNode : public Node
+    {
+    public:
+        virtual const Expression &dep(const int i) const override { return dep1; };
+        bool is_unary() const override { return true; };
+        Expression dep1;
+    };
+
+    class BinaryNode : public Node
+    {
+    public:
+        BinaryNode(const Expression &expr1, const Expression &expr2) : expr1(expr1), expr2(expr2){};
+        virtual const Expression &dep(const int i) const override { return (i == 0) ? expr1 : expr2; };
+        bool is_binary() const override { return true; };
         const Expression expr1;
         const Expression expr2;
     };
 
-    class PlusNode : public TwoNode
+    class PlusNode : public BinaryNode
     {
     public:
-        PlusNode(const Expression &expr1, const Expression &expr2) : TwoNode(expr1, expr2){};
+        PlusNode(const Expression &expr1, const Expression &expr2) : BinaryNode(expr1, expr2){};
         virtual ostream &print(ostream &os) override { return os << "(" << expr1 << "+" << expr2 << ")"; };
+        bool is_plus() const override { return true; };
     };
-    class MultNode : public TwoNode
+    class MultNode : public BinaryNode
     {
     public:
-        MultNode(const Expression &expr1, const Expression &expr2) : TwoNode(expr1, expr2){};
+        MultNode(const Expression &expr1, const Expression &expr2) : BinaryNode(expr1, expr2){};
         virtual ostream &print(ostream &os) override { return os << "(" << expr1 << "*" << expr2 << ")"; };
+        bool is_mult() const override { return true; };
     };
 
     class Sym : public Expression
@@ -96,28 +137,23 @@ namespace SpaLS
     public:
         Const(const double value) : Expression(Expression::make_new(ConstNode(value))){};
     };
-    class Zero : public Expression
-    {
-    public:
-        Zero() : Expression(Expression::make_new(ZeroNode())){};
-    };
+
+    // todo make this friend functions of Expression
 
     Expression operator+(const Expression &expr1, const Expression &expr2)
     {
-        // simplificiations
-        if (expr1 == Zero())
+        // simplifications
+        if (expr1->is_zero())
         {
             return expr2;
         }
-        if (expr2 == Zero())
+        if (expr2->is_zero())
         {
             return expr1;
         }
-        auto expr1_const = dynamic_pointer_cast<ConstNode>(expr1);
-        auto expr2_const = dynamic_pointer_cast<ConstNode>(expr2);
-        if (expr1_const && expr2_const)
+        if (expr1->is_const() && expr2->is_const())
         {
-            return Const(expr1_const->value + expr2_const->value);
+            return Const(expr1->value() + expr2->value());
         }
         return Expression::make_new(PlusNode(expr1, expr2));
     }
@@ -125,15 +161,13 @@ namespace SpaLS
     Expression operator*(const Expression &expr1, const Expression &expr2)
     {
         // simplificiations
-        if (expr1 == Zero() || expr2 == Zero())
+        if (expr1->is_zero() || expr2->is_zero())
         {
-            return Zero();
+            return Const(0.0);
         }
-        auto expr1_const = dynamic_pointer_cast<ConstNode>(expr1);
-        auto expr2_const = dynamic_pointer_cast<ConstNode>(expr2);
-        if (expr1_const && expr2_const)
+        if (expr1->is_const() && expr2->is_const())
         {
-            return Const(expr1_const->value * expr2_const->value);
+            return Const(expr1->value() * expr2->value());
         }
         return Expression::make_new(MultNode(expr1, expr2));
     }
@@ -141,38 +175,47 @@ namespace SpaLS
     vector<Expression> GetTerms(const Expression &expr)
     {
         vector<Expression> terms;
-        // check if plus node
-        auto plus_node = dynamic_pointer_cast<PlusNode>(expr);
-        // check if mult node
-        auto mult_node = dynamic_pointer_cast<MultNode>(expr);
-        auto expr1_plus_node = mult_node ? dynamic_pointer_cast<PlusNode>(mult_node->expr1) : nullptr;
-        auto expr2_plus_node = mult_node ? dynamic_pointer_cast<PlusNode>(mult_node->expr2) : nullptr;
-        auto sym_node = dynamic_pointer_cast<SymNode>(expr);
-        auto const_node = dynamic_pointer_cast<ConstNode>(expr);
-        if (plus_node)
+        // check if binary node
+        if (expr->is_binary())
         {
-            auto expr1 = plus_node->expr1;
-            auto expr2 = plus_node->expr2;
-            auto terms1 = GetTerms(expr1);
-            auto terms2 = GetTerms(expr2);
-            terms.insert(terms.end(), terms1.begin(), terms1.end());
-            terms.insert(terms.end(), terms2.begin(), terms2.end());
+            auto expr1 = expr->dep(0);
+            auto expr2 = expr->dep(1);
+            // check if plus node
+            if (expr->is_plus())
+            {
+                auto terms1 = GetTerms(expr1);
+                auto terms2 = GetTerms(expr2);
+                terms.insert(terms.end(), terms1.begin(), terms1.end());
+                terms.insert(terms.end(), terms2.begin(), terms2.end());
+            }
+            else if (expr->is_mult() && expr1->is_plus())
+            {
+                // (a+b)*c = ac + bc
+                auto termss = GetTerms(expr1->dep(0) * expr2 + expr1->dep(1) * expr2);
+                terms.insert(terms.end(), termss.begin(), termss.end());
+            }
+            else if (expr->is_mult() && expr2->is_plus())
+            {
+                // a*(b+c) = ab + ac
+                auto termss = GetTerms(expr1 * expr2->dep(0) + expr1 * expr2->dep(1));
+                terms.insert(terms.end(), termss.begin(), termss.end());
+            }
+            else if (expr->is_mult() && expr->dep(0)->is_leaf() && expr->dep(1)->is_leaf())
+            {
+                terms.push_back(expr);
+            }
+            else
+            {
+                throw runtime_error("GetTerms: unknown binary node");
+            }
         }
-        else if (mult_node && expr1_plus_node)
+        else if (expr->is_leaf())
         {
-            // (a+b)*c = ac + bc
-            auto termss = GetTerms(expr1_plus_node->expr1 * mult_node->expr2 + expr1_plus_node->expr2 * mult_node->expr2);
-            terms.insert(terms.end(), termss.begin(), termss.end());
-        }
-        else if (mult_node && expr2_plus_node)
-        {
-            // a*(b+c) = ab + ac
-            auto termss = GetTerms(expr2_plus_node->expr1 * mult_node->expr1 + expr2_plus_node->expr2 * mult_node->expr1);
-            terms.insert(terms.end(), termss.begin(), termss.end());
+            terms.push_back(expr);
         }
         else
         {
-            terms.push_back(expr);
+            throw runtime_error("GetTerms: unknown node");
         }
         return terms;
     };
@@ -182,7 +225,7 @@ namespace SpaLS
         vector<vector<Expression>> ret;
         for (auto expr : expr_vec)
         {
-            vector<Expression> coefficients(sym_vec.size(), Zero());
+            vector<Expression> coefficients(sym_vec.size(), Const(0.0));
             // get the terms of the expression
             vector<Expression> terms = GetTerms(expr);
             // iterate over all symbols
@@ -193,11 +236,10 @@ namespace SpaLS
                 for (auto term : terms)
                 {
                     // check if the term contains the symbol
-                    auto mult_node = dynamic_pointer_cast<MultNode>(term);
-                    if (mult_node)
+                    if (term->is_mult())
                     {
-                        auto expr1 = mult_node->expr1;
-                        auto expr2 = mult_node->expr2;
+                        auto expr1 = term->dep(0);
+                        auto expr2 = term->dep(1);
                         if (expr1 == sym)
                         {
                             coefficients.at(i) = coefficients.at(i) + expr2;
@@ -231,11 +273,10 @@ namespace SpaLS
             return;
         }
         // check if expression is a TwoNode
-        auto two_node = dynamic_pointer_cast<TwoNode>(expr);
-        if (two_node)
+        if (expr->is_binary())
         {
-            auto expr1 = two_node->expr1;
-            auto expr2 = two_node->expr2;
+            auto expr1 = expr->dep(0);
+            auto expr2 = expr->dep(1);
             OrderDepthFirstRecurse(expr1, result);
             OrderDepthFirstRecurse(expr2, result);
         }
@@ -261,6 +302,7 @@ namespace SpaLS
         };
 
     public:
+        Function(){};
         Function(const vector<Expression> &input, const vector<Expression> &output)
         {
             // TODO: at this point no re-use of workspace is done, the lifetime of workspace variables is not taken into account
@@ -272,8 +314,7 @@ namespace SpaLS
             for (auto expr : ordered_expression)
             {
                 // check if expr is a Sym
-                auto sym_node = dynamic_pointer_cast<SymNode>(expr);
-                if (sym_node)
+                if (expr->is_sym())
                 {
                     // find the index of expr in input
                     auto it = find(input.begin(), input.end(), expr);
@@ -289,25 +330,22 @@ namespace SpaLS
                     algorithm.push_back(el);
                 }
                 // check if expr is a Const
-                auto const_node = dynamic_pointer_cast<ConstNode>(expr);
-                if (const_node)
+                else if (expr->is_const())
                 {
-                    AlgEl el({CONST, 0, 0, const_node->value});
+                    AlgEl el({CONST, 0, 0, expr->value()});
                     algorithm.push_back(el);
                 }
                 // check if expr is a Zero
-                auto zero_node = dynamic_pointer_cast<ZeroNode>(expr);
-                if (zero_node)
+                else if (expr->is_zero())
                 {
                     AlgEl el({CONST, 0, 0, 0.0});
                     algorithm.push_back(el);
                 }
                 // check if expr is a BinaryNode
-                auto binary_node = dynamic_pointer_cast<TwoNode>(expr);
-                if (binary_node)
+                else if (expr->is_binary())
                 {
                     // find the index of expr1 in ordered_expression
-                    auto it = find(ordered_expression.begin(), ordered_expression.end(), binary_node->expr1);
+                    auto it = find(ordered_expression.begin(), ordered_expression.end(), expr->dep(0));
 
                     // check if expr1 is in ordered_expression
                     if (it >= ordered_expression.end())
@@ -318,7 +356,7 @@ namespace SpaLS
                     // convert it find output to index
                     int index1 = it - ordered_expression.begin();
                     // find the index of expr2 in ordered_expression
-                    it = find(ordered_expression.begin(), ordered_expression.end(), binary_node->expr2);
+                    it = find(ordered_expression.begin(), ordered_expression.end(), expr->dep(1));
                     // check if expr2 is in ordered_expression
                     if (it >= ordered_expression.end())
                     {
@@ -327,11 +365,26 @@ namespace SpaLS
                     }
                     // convert it find output to index
                     int index2 = it - ordered_expression.begin();
-                    auto plus_node = dynamic_pointer_cast<PlusNode>(expr);
-                    // check if expr is a MultNode
-                    auto mult_node = dynamic_pointer_cast<MultNode>(expr);
-                    AlgEl el({mult_node ? MULT : PLUS, index1, index2, 0.0});
-                    algorithm.push_back(el);
+                    if (expr->is_mult())
+                    {
+                        AlgEl el({MULT, index1, index2, 0.0});
+                        algorithm.push_back(el);
+                    }
+                    else if (expr->is_plus())
+                    {
+                        AlgEl el({PLUS, index1, index2, 0.0});
+                        algorithm.push_back(el);
+                    }
+                    else
+                    {
+                        // runtime error
+                        runtime_error("Error in Function constructor");
+                    }
+                }
+                else
+                {
+                    // runtime error
+                    runtime_error("Error in Function constructor");
                 }
             }
             // add the output instruction
@@ -391,7 +444,7 @@ namespace SpaLS
     public:
         Matrix(const int n_rows, const int n_cols) : n_rows_(n_rows), n_cols_(n_cols)
         {
-            data.resize(n_rows * n_cols, Zero());
+            data.resize(n_rows * n_cols, Const(0.0));
         };
         Expression &operator()(int i, int j) { return data[i + n_rows_ * j]; };
         const Expression &operator()(int i, int j) const { return data[i + n_rows_ * j]; };
@@ -430,7 +483,7 @@ namespace SpaLS
             {
                 for (int j = 0; j < n_cols; j++)
                 {
-                    (*this)(i, j) = Zero();
+                    (*this)(i, j) = Const(0.0);
                 }
             }
         };
@@ -450,7 +503,7 @@ namespace SpaLS
                     }
                     else
                     {
-                        (*this)(i, j) = Zero();
+                        (*this)(i, j) = Const(0.0);
                     }
                 }
             }
@@ -515,6 +568,16 @@ namespace SpaLS
             }
         }
         return vec;
+    }
+    vector<Expression> vec(const vector<Matrix> &mats)
+    {
+        vector<Expression> ret;
+        for (auto mat : mats)
+        {
+            auto vecc = vec(mat);
+            ret.insert(ret.end(), vecc.begin(), vecc.end());
+        }
+        return ret;
     }
 }
 #endif // NODEINCLUDED
