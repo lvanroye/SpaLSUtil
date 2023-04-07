@@ -11,6 +11,7 @@ using namespace std;
 namespace SpaLS
 {
     class Expression; // forward declaration
+    class Sym;        // forward declaration
 
     class Node
     {
@@ -25,6 +26,8 @@ namespace SpaLS
         virtual bool is_unary() const { return false; };
         virtual bool is_binary() const { return false; };
         virtual bool is_leaf() const { return false; };
+        virtual bool is_factor() const = 0;
+        virtual bool depends_on(const Sym &sym) const = 0;
         virtual const Expression &dep(const int i) const
         {
             throw runtime_error("Node::dep() not available");
@@ -52,6 +55,8 @@ namespace SpaLS
     class LeafNode : public Node
     {
         bool is_leaf() const override { return true; };
+        virtual bool is_factor() const override { return true; };
+        virtual bool depends_on(const Sym &sym) const override { return false; };
     };
 
     class SymNode : public LeafNode
@@ -61,6 +66,7 @@ namespace SpaLS
         const string name;
         bool is_sym() const override { return true; };
         virtual ostream &print(ostream &os) { return os << name; };
+        virtual bool depends_on(const Sym &sym) const override; // forward declaration
     };
 
     class ConstNode : public LeafNode
@@ -104,6 +110,8 @@ namespace SpaLS
         virtual const Expression &dep(const int i) const override { return dep1; };
         bool is_unary() const override { return true; };
         Expression dep1;
+        virtual bool is_factor() const override { return dep1->is_factor(); };
+        virtual bool depends_on(const Sym &sym) const override; // forward declaration
     };
 
     class BinaryNode : public Node
@@ -114,6 +122,8 @@ namespace SpaLS
         bool is_binary() const override { return true; };
         const Expression expr1;
         const Expression expr2;
+        virtual bool is_factor() const override { return expr1->is_factor() && expr2->is_factor(); };
+        virtual bool depends_on(const Sym &sym) const override; // forward declaration
     };
 
     class PlusNode : public BinaryNode
@@ -122,6 +132,7 @@ namespace SpaLS
         PlusNode(const Expression &expr1, const Expression &expr2) : BinaryNode(expr1, expr2){};
         virtual ostream &print(ostream &os) override { return os << "(" << expr1 << "+" << expr2 << ")"; };
         bool is_plus() const override { return true; };
+        virtual bool is_factor() const override { return false; };
     };
     class MultNode : public BinaryNode
     {
@@ -136,6 +147,14 @@ namespace SpaLS
     public:
         Sym(const string &name) : Expression(Expression::make_new(SymNode(name))){};
     };
+
+    bool SymNode::depends_on(const Sym &sym) const
+    {
+        return this->equals(*sym);
+    };
+    bool UnaryNode::depends_on(const Sym &sym) const { return dep1->depends_on(sym); };
+    bool BinaryNode::depends_on(const Sym &sym) const { return expr1->depends_on(sym) || expr2->depends_on(sym); };
+
     class Const : public Expression
     {
     public:
@@ -157,7 +176,7 @@ namespace SpaLS
         }
         if (expr1->is_const() && expr2->is_const())
         {
-            return Const(expr1->value() + expr2->value());
+            return expr1->value() + expr2->value();
         }
         return Expression::make_new(PlusNode(expr1, expr2));
     }
@@ -167,20 +186,64 @@ namespace SpaLS
         // simplificiations
         if (expr1->is_zero() || expr2->is_zero())
         {
-            return Const(0.0);
+            return 0.0;
         }
         if (expr1->is_const() && expr2->is_const())
         {
-            return Const(expr1->value() * expr2->value());
+            return expr1->value() * expr2->value();
+        }
+        if (expr1 == 1.0)
+        {
+            return expr2;
+        }
+        if (expr2 == 1.0)
+        {
+            return expr1;
         }
         return Expression::make_new(MultNode(expr1, expr2));
     }
 
+    Expression operator-(const Expression &expr1)
+    {
+        return -1.0 * expr1;
+    }
+    Expression operator-(const Expression &expr1, const Expression &expr2)
+    {
+        return expr1 + (-1.0 * expr2);
+    }
+
+    vector<Expression> GetFactors(const Expression &expr)
+    {
+        // check if expr is factorable
+        vector<Expression> factors;
+        // base case
+        if (expr->is_leaf() || expr->is_unary())
+        {
+            factors.push_back(expr);
+        }
+        else if (expr->is_mult())
+        {
+            auto fac1 = GetFactors(expr->dep(0));
+            auto fac2 = GetFactors(expr->dep(1));
+            // concatenate fac1 and fac2
+            factors.insert(factors.end(), fac1.begin(), fac1.end());
+            factors.insert(factors.end(), fac2.begin(), fac2.end());
+        }
+        else
+        {
+            throw std::runtime_error("Expression is not factorable");
+        }
+        return factors;
+    }
     vector<Expression> GetTerms(const Expression &expr)
     {
         vector<Expression> terms;
         // check if binary node
-        if (expr->is_binary())
+        if (expr->is_factor())
+        {
+            terms.push_back(expr);
+        }
+        else if (expr->is_binary())
         {
             auto expr1 = expr->dep(0);
             auto expr2 = expr->dep(1);
@@ -204,18 +267,10 @@ namespace SpaLS
                 auto termss = GetTerms(expr1 * expr2->dep(0) + expr1 * expr2->dep(1));
                 terms.insert(terms.end(), termss.begin(), termss.end());
             }
-            else if (expr->is_mult() && expr->dep(0)->is_leaf() && expr->dep(1)->is_leaf())
-            {
-                terms.push_back(expr);
-            }
             else
             {
                 throw runtime_error("GetTerms: unknown binary node");
             }
-        }
-        else if (expr->is_leaf())
-        {
-            terms.push_back(expr);
         }
         else
         {
@@ -224,7 +279,7 @@ namespace SpaLS
         return terms;
     };
 
-    vector<vector<Expression>> GetCoefficients(const vector<Expression> &expr_vec, const vector<Expression> &sym_vec)
+    vector<vector<Expression>> GetCoefficients(const vector<Expression> &expr_vec, const vector<Sym> &sym_vec)
     {
         vector<vector<Expression>> ret;
         for (auto expr : expr_vec)
@@ -239,28 +294,40 @@ namespace SpaLS
                 // iterate over all terms
                 for (auto term : terms)
                 {
+                    if (term->equals(*sym))
+                    {
+                        coefficients.at(i) = coefficients.at(i) + 1.0;
+                    }
                     // check if the term contains the symbol
-                    if (term->is_mult())
+                    else if (term->is_factor() && term->depends_on(sym))
                     {
-                        auto expr1 = term->dep(0);
-                        auto expr2 = term->dep(1);
-                        if (expr1 == sym)
+                        auto factors = GetFactors(term);
+                        int count = 0;
+                        for (auto factor : factors)
                         {
-                            coefficients.at(i) = coefficients.at(i) + expr2;
+                            // check if the factor is the symbol
+                            if (factor->equals(*sym))
+                            {
+                                count++;
+                            }
                         }
-                        else if (expr2 == sym)
+                        Expression coeff(1.0);
+                        if (count == 1)
                         {
-                            coefficients.at(i) = coefficients.at(i) + expr1;
+                            for (auto factor : factors)
+                            {
+                                // check if the factor is the symbol
+                                if (!factor->equals(*sym))
+                                {
+                                    coeff = coeff * factor;
+                                }
+                            }
+                            coefficients.at(i) = coefficients.at(i) + coeff;
                         }
-                    }
-                    else if (term == sym)
-                    {
-                        coefficients.at(i) = coefficients.at(i) + Const(1.0);
-                    }
-                    else
-                    {
-                        // runtime error
-                        runtime_error("Error in GetCoefficients");
+                        else if (count > 1)
+                        {
+                            throw runtime_error("Error in GetCoefficientsm, count > 1");
+                        }
                     }
                 }
             }
@@ -326,7 +393,7 @@ namespace SpaLS
                     if (it >= input.end())
                     {
                         // runtime error
-                        runtime_error("Error in Function constructor");
+                        throw runtime_error("Error in Function constructor");
                     }
                     // convert it find output to index
                     int index = it - input.begin();
@@ -355,7 +422,7 @@ namespace SpaLS
                     if (it >= ordered_expression.end())
                     {
                         // runtime error
-                        runtime_error("Error in Function constructor");
+                        throw runtime_error("Error in Function constructor");
                     }
                     // convert it find output to index
                     int index1 = it - ordered_expression.begin();
@@ -365,7 +432,7 @@ namespace SpaLS
                     if (it >= ordered_expression.end())
                     {
                         // runtime error
-                        runtime_error("Error in Function constructor");
+                        throw runtime_error("Error in Function constructor");
                     }
                     // convert it find output to index
                     int index2 = it - ordered_expression.begin();
@@ -382,13 +449,13 @@ namespace SpaLS
                     else
                     {
                         // runtime error
-                        runtime_error("Error in Function constructor");
+                        throw runtime_error("Error in Function constructor");
                     }
                 }
                 else
                 {
                     // runtime error
-                    runtime_error("Error in Function constructor");
+                    throw runtime_error("Error in Function constructor");
                 }
             }
             // add the output instruction
@@ -431,7 +498,7 @@ namespace SpaLS
                     break;
                 default:
                     // runtime error
-                    runtime_error("Error in Function Eval");
+                    throw runtime_error("Error in Function Eval");
                     break;
                 }
             }
@@ -490,7 +557,7 @@ namespace SpaLS
             {
                 for (int j = 0; j < n_cols; j++)
                 {
-                    (*this)(i, j) = Const(0.0);
+                    (*this)(i, j) = 0.0;
                 }
             }
         };
@@ -507,11 +574,11 @@ namespace SpaLS
                 {
                     if (i == j)
                     {
-                        (*this)(i, j) = Const(1.0);
+                        (*this)(i, j) = 1.0;
                     }
                     else
                     {
-                        (*this)(i, j) = Const(0.0);
+                        (*this)(i, j) = 0.0;
                     }
                 }
             }
