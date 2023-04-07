@@ -9,10 +9,8 @@ int main()
     Sym x("x");
     Sym y("y");
 
-    auto expr = (a + b + 1) * (x + y) + 5 * x;
-    auto terms = GetTerms(expr);
-    for (auto term : terms)
-        cout << term << endl;
+    auto expr = (a + b + 1) * (x + y) - 5 * x;
+    auto terms = GetTerms(expr, SymVec({x, y}));
     auto coeffs = GetCoefficients({expr}, {x, y});
     // coefficients
     cout << "coefficients: "<< endl;

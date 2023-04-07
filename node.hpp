@@ -212,19 +212,36 @@ namespace SpaLS
         return expr1 + (-1.0 * expr2);
     }
 
-    vector<Expression> GetFactors(const Expression &expr)
+    class SymVec : public vector<Sym>
+    {
+    public:
+        SymVec(const vector<Sym> &sym) : vector<Sym>(sym){};
+        bool appears_in(const Expression &expr) const
+        {
+            for (auto &sym : *this)
+            {
+                if (expr->depends_on(sym))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+    };
+
+    vector<Expression> GetFactors(const Expression &expr, const SymVec &syms)
     {
         // check if expr is factorable
         vector<Expression> factors;
         // base case
-        if (expr->is_leaf() || expr->is_unary())
+        if ((expr->is_leaf() || (!syms.appears_in(expr))) || expr->is_unary())
         {
             factors.push_back(expr);
         }
         else if (expr->is_mult())
         {
-            auto fac1 = GetFactors(expr->dep(0));
-            auto fac2 = GetFactors(expr->dep(1));
+            auto fac1 = GetFactors(expr->dep(0), syms);
+            auto fac2 = GetFactors(expr->dep(1), syms);
             // concatenate fac1 and fac2
             factors.insert(factors.end(), fac1.begin(), fac1.end());
             factors.insert(factors.end(), fac2.begin(), fac2.end());
@@ -235,7 +252,8 @@ namespace SpaLS
         }
         return factors;
     }
-    vector<Expression> GetTerms(const Expression &expr)
+
+    vector<Expression> GetTerms(const Expression &expr, const SymVec &syms)
     {
         vector<Expression> terms;
         // check if binary node
@@ -250,22 +268,26 @@ namespace SpaLS
             // check if plus node
             if (expr->is_plus())
             {
-                auto terms1 = GetTerms(expr1);
-                auto terms2 = GetTerms(expr2);
+                auto terms1 = GetTerms(expr1, syms);
+                auto terms2 = GetTerms(expr2, syms);
                 terms.insert(terms.end(), terms1.begin(), terms1.end());
                 terms.insert(terms.end(), terms2.begin(), terms2.end());
             }
-            else if (expr->is_mult() && expr1->is_plus())
+            else if (expr->is_mult() && (expr1->is_plus() && syms.appears_in(expr1)))
             {
                 // (a+b)*c = ac + bc
-                auto termss = GetTerms(expr1->dep(0) * expr2 + expr1->dep(1) * expr2);
+                auto termss = GetTerms(expr1->dep(0) * expr2 + expr1->dep(1) * expr2, syms);
                 terms.insert(terms.end(), termss.begin(), termss.end());
             }
-            else if (expr->is_mult() && expr2->is_plus())
+            else if (expr->is_mult() && (expr2->is_plus() && syms.appears_in(expr2)))
             {
                 // a*(b+c) = ab + ac
-                auto termss = GetTerms(expr1 * expr2->dep(0) + expr1 * expr2->dep(1));
+                auto termss = GetTerms(expr1 * expr2->dep(0) + expr1 * expr2->dep(1), syms);
                 terms.insert(terms.end(), termss.begin(), termss.end());
+            }
+            else if (expr->is_mult())
+            {
+                terms.push_back(expr);
             }
             else
             {
@@ -286,7 +308,7 @@ namespace SpaLS
         {
             vector<Expression> coefficients(sym_vec.size(), 0.0);
             // get the terms of the expression
-            vector<Expression> terms = GetTerms(expr);
+            vector<Expression> terms = GetTerms(expr, sym_vec);
             // iterate over all symbols
             for (int i = 0; i < sym_vec.size(); i++)
             {
@@ -299,9 +321,9 @@ namespace SpaLS
                         coefficients.at(i) = coefficients.at(i) + 1.0;
                     }
                     // check if the term contains the symbol
-                    else if (term->is_factor() && term->depends_on(sym))
+                    else if (term->depends_on(sym))
                     {
-                        auto factors = GetFactors(term);
+                        auto factors = GetFactors(term, vector<Sym>{sym});
                         int count = 0;
                         for (auto factor : factors)
                         {
