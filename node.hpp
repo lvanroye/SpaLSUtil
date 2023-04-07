@@ -240,6 +240,10 @@ namespace SpaLS
         }
         else if (expr->is_mult())
         {
+            if (!((syms.appears_in(expr->dep(0))) ^ (syms.appears_in(expr->dep(1)))))
+            {
+                throw std::runtime_error("Expression is not factorable");
+            }
             auto fac1 = GetFactors(expr->dep(0), syms);
             auto fac2 = GetFactors(expr->dep(1), syms);
             // concatenate fac1 and fac2
@@ -301,6 +305,17 @@ namespace SpaLS
         return terms;
     };
 
+    /***
+     *
+     *
+     *
+     *
+        // TODO: this is a very stupid and slow implementation
+     *
+     *
+     *
+     *
+    */
     vector<vector<Expression>> GetCoefficients(const vector<Expression> &expr_vec, const vector<Sym> &sym_vec)
     {
         vector<vector<Expression>> ret;
@@ -309,47 +324,45 @@ namespace SpaLS
             vector<Expression> coefficients(sym_vec.size(), 0.0);
             // get the terms of the expression
             vector<Expression> terms = GetTerms(expr, sym_vec);
+            vector<vector<Expression>> terms_factored;
+            for (auto term : terms)
+            {
+                auto factors = GetFactors(term, sym_vec);
+                terms_factored.push_back(factors);
+            }
             // iterate over all symbols
             for (int i = 0; i < sym_vec.size(); i++)
             {
                 auto sym = sym_vec.at(i);
                 // iterate over all terms
-                for (auto term : terms)
+                for (auto term_factored : terms_factored)
                 {
-                    if (term->equals(*sym))
+                    if (term_factored.size() == 1 && term_factored[0]->equals(*sym))
                     {
                         coefficients.at(i) = coefficients.at(i) + 1.0;
                     }
-                    // check if the term contains the symbol
-                    else if (term->depends_on(sym))
+                    auto factors = term_factored;
+                    int count = 0;
+                    for (auto factor : factors)
                     {
-                        auto factors = GetFactors(term, vector<Sym>{sym});
-                        int count = 0;
+                        // check if the factor is the symbol
+                        if (factor->equals(*sym))
+                        {
+                            count++;
+                        }
+                    }
+                    Expression coeff(1.0);
+                    if (count == 1)
+                    {
                         for (auto factor : factors)
                         {
                             // check if the factor is the symbol
-                            if (factor->equals(*sym))
+                            if (!factor->equals(*sym))
                             {
-                                count++;
+                                coeff = coeff * factor;
                             }
                         }
-                        Expression coeff(1.0);
-                        if (count == 1)
-                        {
-                            for (auto factor : factors)
-                            {
-                                // check if the factor is the symbol
-                                if (!factor->equals(*sym))
-                                {
-                                    coeff = coeff * factor;
-                                }
-                            }
-                            coefficients.at(i) = coefficients.at(i) + coeff;
-                        }
-                        else if (count > 1)
-                        {
-                            throw runtime_error("Error in GetCoefficientsm, count > 1");
-                        }
+                        coefficients.at(i) = coefficients.at(i) + coeff;
                     }
                 }
             }
