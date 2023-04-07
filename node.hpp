@@ -242,7 +242,7 @@ namespace SpaLS
         {
             if (!((syms.appears_in(expr->dep(0))) ^ (syms.appears_in(expr->dep(1)))))
             {
-                throw std::runtime_error("Expression is not factorable");
+                throw std::runtime_error("Expression is not factorable - both sides of multiplication contain symbols");
             }
             auto fac1 = GetFactors(expr->dep(0), syms);
             auto fac2 = GetFactors(expr->dep(1), syms);
