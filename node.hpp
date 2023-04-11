@@ -305,68 +305,78 @@ namespace SpaLS
         return terms;
     };
 
-    /***
-     *
-     *
-     *
-     *
-        // TODO: this is a very stupid and slow implementation
-     *
-     *
-     *
-     *
-    */
-    vector<vector<Expression>> GetCoefficients(const vector<Expression> &expr_vec, const vector<Sym> &sym_vec)
+    template <typename T>
+    struct Triplet
     {
-        vector<vector<Expression>> ret;
-        for (auto expr : expr_vec)
+        int row;
+        int col;
+        T value;
+        Triplet(int row, int col, T value) : row(row), col(col), value(value){};
+    };
+
+    template <typename T>
+    class TripletVec : public vector<Triplet<T>>
+    {
+    public:
+        T &get_el(const int i, const int j)
         {
-            vector<Expression> coefficients(sym_vec.size(), 0.0);
+            for (auto &triplet : *this)
+            {
+                if (triplet.row == i && triplet.col == j)
+                {
+                    return triplet.value;
+                }
+            }
+            this->push_back(Triplet<T>(i, j, 0.0));
+            return this->back().value;
+        }
+    };
+
+    TripletVec<Expression> GetCoefficients(const vector<Expression> &expr_vec, const vector<Sym> &sym_vec)
+    {
+        TripletVec<Expression> ret;
+        for (int i = 0; i < expr_vec.size(); i++)
+        {
+            Expression expr = expr_vec.at(i);
+            // vector<Expression> coefficients(sym_vec.size(), 0.0);
             // get the terms of the expression
             vector<Expression> terms = GetTerms(expr, sym_vec);
-            vector<vector<Expression>> terms_factored;
+            // iterate over all terms
             for (auto term : terms)
             {
-                auto factors = GetFactors(term, sym_vec);
-                terms_factored.push_back(factors);
-            }
-            // iterate over all symbols
-            for (int i = 0; i < sym_vec.size(); i++)
-            {
-                auto sym = sym_vec.at(i);
-                // iterate over all terms
-                for (auto term_factored : terms_factored)
+                // iterate over all symbols
+                int count = 0;
+                int coeff_ind = 0;
+                Expression coeff(1.0);
+                for (int j = 0; j < sym_vec.size(); j++)
                 {
-                    if (term_factored.size() == 1 && term_factored[0]->equals(*sym))
+                    auto sym = sym_vec.at(j);
+                    // check if the symbol is in the term
+                    if (term->depends_on(sym))
                     {
-                        coefficients.at(i) = coefficients.at(i) + 1.0;
-                    }
-                    auto factors = term_factored;
-                    int count = 0;
-                    for (auto factor : factors)
-                    {
-                        // check if the factor is the symbol
-                        if (factor->equals(*sym))
-                        {
-                            count++;
-                        }
-                    }
-                    Expression coeff(1.0);
-                    if (count == 1)
-                    {
+                        vector<vector<Expression>> terms_factored;
+                        auto factors = GetFactors(term, sym_vec);
+                        terms_factored.push_back(factors);
+                        coeff_ind = j;
                         for (auto factor : factors)
                         {
-                            // check if the factor is the symbol
                             if (!factor->equals(*sym))
                             {
                                 coeff = coeff * factor;
                             }
                         }
-                        coefficients.at(i) = coefficients.at(i) + coeff;
+                        count++;
                     }
                 }
+                if (count > 1)
+                {
+                    throw runtime_error("GetCoefficients: expression is not linear");
+                }
+                else if (count == 1)
+                {
+                    ret.get_el(i, coeff_ind) = ret.get_el(i, coeff_ind) + coeff;
+                }
             }
-            ret.push_back(coefficients);
         }
         return ret;
     };
@@ -623,7 +633,7 @@ namespace SpaLS
     class SymMatrix : public Matrix<Expression>
     {
     public:
-        SymMatrix(const string &name, const int n_rows, const int n_cols) : Matrix(n_rows, n_cols)
+        SymMatrix(const string &name, const int n_rows, const int n_cols) : Matrix<Expression>(n_rows, n_cols)
         {
             for (int i = 0; i < n_rows; i++)
             {
