@@ -305,13 +305,17 @@ namespace SpaLS
         return terms;
     };
 
+    struct Index
+    {
+        int row = 0;
+        int col = 0;
+    };
     template <typename T>
     struct Triplet
     {
-        int row;
-        int col;
+        Index index;
         T value;
-        Triplet(int row, int col, T value) : row(row), col(col), value(value){};
+        Triplet(int row, int col, T value) : index{row,col}, value(value){};
     };
 
     template <typename T>
@@ -322,7 +326,7 @@ namespace SpaLS
         {
             for (auto &triplet : *this)
             {
-                if (triplet.row == i && triplet.col == j)
+                if (triplet.index.row == i && triplet.index.col == j)
                 {
                     return triplet.value;
                 }
